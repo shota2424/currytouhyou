@@ -114,17 +114,6 @@
             background-color: #0052a3;
         }
 
-        .btn-reset {
-            background-color: #cc3333;
-            color: white;
-        }
-
-        .btn-reset:hover {
-            background-color: #a62a2a;
-        }
-
-
-
         /* メッセージ */
         .message {
             margin-top: 15px;
@@ -142,13 +131,6 @@
         }
 
         .message.error {
-            background-color: #f8d7da;
-            color: #721c24;
-            border: 1px solid #f5c6cb;
-            display: block;
-        }
-
-        .message.reset {
             background-color: #f8d7da;
             color: #721c24;
             border: 1px solid #f5c6cb;
@@ -214,112 +196,117 @@
             </div>
             <div class="button-group">
                 <button class="btn-register" id="registerBtn">投票を登録する</button>
-
             </div>
+
             <div id="voteCount" class="vote-count" style="display: none;"></div>
             <div class="message" id="message"></div>
         </div>
     </div>
 
-    <script>
-        // ===== 定数 =====
+    <!-- Firebase連携スクリプト -->
+    <script type="module">
+        // ===== Firestoreセットアップ =====
+        import { initializeApp } from 'https://www.gstatic.com/firebasejs/12.4.0/firebase-app.js';
+        import {
+            getFirestore,
+            collection,
+            addDoc,
+            serverTimestamp,
+            onSnapshot
+        } from 'https://www.gstatic.com/firebasejs/12.4.0/firebase-firestore.js';
+
+        // Firebaseプロジェクト設定
+        const firebaseConfig = {
+            apiKey: "AIzaSyDES9Z2fu4v7BG5PFKQS2T-CFB_qESIOGo",
+            authDomain: "curry-project-9f5c4.firebaseapp.com",
+            projectId: "curry-project-9f5c4",
+            storageBucket: "curry-project-9f5c4.firebasestorage.app",
+            messagingSenderId: "52880163835",
+            appId: "1:52880163835:web:4a848a437acfc90b14415e",
+            measurementId: "G-TN13LGRGV7"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+        const votesCol = collection(db, 'votes'); // 全員の票を集計するコレクション
+
+        // ===== 得点ルール =====
         const SCORE_MAP = {
             0: 0,
             1: 2,
             2: 4,
             3: 5,
         };
-        const STORAGE_KEY = "weightedVoteData_v2_anonymous";
 
-        // ===== 状態 =====
-        let votes = [];
+        // DOM参照
+        const correctCountSelect = document.getElementById('correctCount');
+        const teamSelect = document.getElementById('team');
+        const registerBtn = document.getElementById('registerBtn');
+        const voteCountEl = document.getElementById('voteCount');
+        const messageEl = document.getElementById('message');
 
-        // ===== 初期化処理 =====
-        document.addEventListener('DOMContentLoaded', function() {
-            // localStorageからデータを復元
-            const savedData = localStorage.getItem(STORAGE_KEY);
-            if (savedData) {
-                try {
-                    votes = JSON.parse(savedData);
-                } catch (e) {
-                    console.error('Failed to parse saved data:', e);
-                    votes = [];
-                }
-            }
-
-            // 投票数を表示
-            updateVoteCount();
-
-            // イベントリスナーをバインド
-            document.getElementById('registerBtn').addEventListener('click', addVote);
-
-
+        // ===== 投票総数のリアルタイム表示 =====
+        // Firestoreのvotesコレクション全体を監視して、登録済み件数を表示
+        onSnapshot(votesCol, (snapshot) => {
+            const count = snapshot.size;
+            updateVoteCount(count);
         });
 
-        // ===== 投票登録処理 =====
-        function addVote() {
-            const correctCountSelect = document.getElementById('correctCount');
-            const teamSelect = document.getElementById('team');
-            const messageEl = document.getElementById('message');
-
-            // バリデーション
-            if (correctCountSelect.value === '' || teamSelect.value === '') {
-                showMessage('正解数と投票チームの両方を選択してください', 'error');
-                return;
-            }
-
-            // データを取得
-            const correctCount = parseInt(correctCountSelect.value, 10);
-            const team = teamSelect.value;
-            const points = SCORE_MAP[correctCount];
-
-            // 投票データを追加
-            votes.push({
-                correctCount: correctCount,
-                team: team,
-                points: points,
-            });
-
-            // localStorageに保存
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(votes));
-
-            // 入力欄をクリア
-            correctCountSelect.value = '';
-            teamSelect.value = '';
-
-            // 投票数を更新
-            updateVoteCount();
-
-            // 成功メッセージを表示
-            showMessage('投票を登録しました', 'success');
-        }
-
-
-
-        // ===== 投票数表示処理 =====
-        function updateVoteCount() {
-            const voteCountEl = document.getElementById('voteCount');
-            if (votes.length > 0) {
-                voteCountEl.textContent = `現在 ${votes.length} 件の投票が登録されています`;
+        function updateVoteCount(count) {
+            if (count > 0) {
+                voteCountEl.textContent = `現在 ${count} 件の投票が登録されています`;
                 voteCountEl.style.display = 'block';
             } else {
                 voteCountEl.style.display = 'none';
             }
         }
 
-
-
-        // ===== メッセージ表示処理 =====
+        // ===== メッセージ表示 =====
         function showMessage(text, type) {
-            const messageEl = document.getElementById('message');
             messageEl.textContent = text;
             messageEl.className = `message ${type}`;
 
-            // 3秒後に非表示
             setTimeout(() => {
                 messageEl.className = 'message';
             }, 3000);
         }
+
+        // ===== 投票登録処理 =====
+        async function addVote() {
+            // 入力チェック
+            if (correctCountSelect.value === '' || teamSelect.value === '') {
+                showMessage('正解数と投票チームの両方を選択してください', 'error');
+                return;
+            }
+
+            // 入力値
+            const correctCount = parseInt(correctCountSelect.value, 10);
+            const team = teamSelect.value;
+            const points = SCORE_MAP[correctCount];
+
+            // Firestoreに書き込み
+            try {
+                await addDoc(votesCol, {
+                    correctCount: correctCount, // 何問正解した人の投票か
+                    team: team,                 // どのチームに投票したか
+                    points: points,             // その票が何点としてカウントされるか
+                    createdAt: serverTimestamp()
+                });
+
+                // 入力欄クリア
+                correctCountSelect.value = '';
+                teamSelect.value = '';
+
+                // 完了メッセージ
+                showMessage('投票を登録しました', 'success');
+            } catch (err) {
+                console.error(err);
+                showMessage('エラーが発生しました。もう一度お願いします。', 'error');
+            }
+        }
+
+        // クリックで投票
+        registerBtn.addEventListener('click', addVote);
     </script>
 </body>
 </html>
